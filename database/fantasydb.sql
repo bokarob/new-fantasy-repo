@@ -487,6 +487,68 @@ CREATE TABLE `votingtopics` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
+-- Table structure for table `leaguetable`
+--
+
+CREATE TABLE leaguetable (
+  league_id     INT NOT NULL,
+  gameweek      SMALLINT NOT NULL,
+  team_id       INT NOT NULL,
+
+  win           INT NOT NULL DEFAULT 0,
+  draw          INT NOT NULL DEFAULT 0,
+  loss          INT NOT NULL DEFAULT 0,
+
+  team_points   INT NOT NULL DEFAULT 0,
+  match_points  INT NOT NULL DEFAULT 0,
+  set_points    INT NOT NULL DEFAULT 0,
+
+  updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+               ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (league_id, gameweek, team_id),
+
+  -- Useful for “table view per GW”
+  INDEX idx_leaguetable_league_gw (league_id, gameweek),
+
+  -- Useful for ordering / partial optimizations (sorting still happens, but helps scans)
+  INDEX idx_leaguetable_sort (league_id, gameweek, team_points, match_points, set_points)
+);
+
+--
+-- Table structure for table `auth_refresh_tokens`
+--
+
+CREATE TABLE auth_refresh_tokens (
+  refresh_token_id BIGINT NOT NULL AUTO_INCREMENT,
+  profile_id       INT NOT NULL,
+
+  -- SHA-256 hash of the refresh token (32 bytes). Store hash, never raw token.
+  token_hash       VARBINARY(32) NOT NULL,
+
+  created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at       TIMESTAMP NOT NULL,
+
+  revoked_at       TIMESTAMP NULL DEFAULT NULL,
+  last_used_at     TIMESTAMP NULL DEFAULT NULL,
+
+  -- Optional but useful for session management UX / debugging
+  device_name      VARCHAR(80) NULL DEFAULT NULL,
+
+  PRIMARY KEY (refresh_token_id),
+
+  -- Ensure a token hash can’t exist twice
+  UNIQUE KEY uq_auth_refresh_token_hash (token_hash),
+
+  -- Fast lookup for “list active sessions” or cleanup jobs
+  INDEX idx_auth_refresh_profile (profile_id, revoked_at, expires_at),
+  INDEX idx_auth_refresh_expires (expires_at)
+
+ 
+);
+
+
+--
 -- Indexes for dumped tables
 --
 
@@ -744,6 +806,60 @@ ALTER TABLE `trollbet`
 ALTER TABLE `votingtopics`
   MODIFY `survey_id` int(11) NOT NULL AUTO_INCREMENT;
 COMMIT;
+
+--
+-- updated_at columns
+--
+
+ALTER TABLE competitor
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE notification
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE privateleague
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE privateleaguemembers
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE roster
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE transfers
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE teamranking
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE teamresult
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE playertrade
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE playerresult
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE matches
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE news
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE gameweeks
+  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+
+ALTER TABLE profile
+  ADD COLUMN email_verified_at TIMESTAMP NULL DEFAULT NULL,
+  ADD COLUMN otp_hash VARBINARY(32) NULL DEFAULT NULL,
+  ADD COLUMN otp_expires_at TIMESTAMP NULL DEFAULT NULL,
+  ADD COLUMN otp_attempts SMALLINT NOT NULL DEFAULT 0,
+  ADD COLUMN otp_last_sent_at TIMESTAMP NULL DEFAULT NULL,
+  ADD COLUMN otp_resend_count SMALLINT NOT NULL DEFAULT 0,
+  ADD COLUMN otp_purpose VARCHAR(20) NULL DEFAULT NULL;
+
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
