@@ -1,8 +1,8 @@
 <?php
-    $host = 'myhost'; //that's the same as 'localhost'
-    $db = 'database';
-    $user = 'myuser'; //this is the user for phpmyadmin. For this case we didn't need one, that's root. When it goes to production, this will be important
-    $pass = 'mypass';
+    $host = '127.0.0.1'; //that's the same as 'localhost'
+    $db = 'fantasy_app';
+    $user = 'root'; //this is the user for phpmyadmin. For this case we didn't need one, that's root. When it goes to production, this will be important
+    $pass = '';
     $charset = 'utf8mb4'; //usual charset
 
     $dsn = "mysql:host=$host;dbname=$db;charset=$charset"; //dsn=data source name. mysql=driver. 
