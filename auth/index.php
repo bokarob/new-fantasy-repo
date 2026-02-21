@@ -198,7 +198,7 @@ function auth_jwt(array $payload, string $secret): string
 
 function auth_issue_tokens(PDO $pdo, int $profileId): array
 {
-    $secret = getenv('JWT_SECRET') ?: '';
+    $secret = auth_jwt_secret();
     if ($secret === '') {
         auth_error(500, 'INTERNAL_ERROR', 'JWT secret is not configured.');
     }
@@ -271,7 +271,7 @@ function auth_store_otp(PDO $pdo, int $profileId, string $purpose, bool $isResen
 
     if ($isResend && $lastSentAt !== null) {
         $cooldown = auth_cooldown_seconds($resendCount);
-        $elapsed = time() - strtotime((string) $lastSentAt);
+        $elapsed = auth_utc_now_ts() - auth_utc_datetime_to_ts((string) $lastSentAt);
         if ($elapsed < $cooldown) {
             auth_error(429, 'OTP_RESEND_COOLDOWN', 'OTP resend requested too soon.', 'R10.6', [
                 'retry_after_seconds' => $cooldown - $elapsed,
@@ -335,7 +335,7 @@ function auth_validate_otp(PDO $pdo, array $profile, string $otpInput, string $p
     }
 
     $expiresAt = $profile['otp_expires_at'] ?? null;
-    if ($expiresAt === null || strtotime((string) $expiresAt) <= time()) {
+    if ($expiresAt === null || auth_utc_datetime_to_ts((string) $expiresAt) <= auth_utc_now_ts()) {
         auth_error(409, 'OTP_EXPIRED', 'OTP code has expired.', 'R10.4');
     }
 
@@ -376,6 +376,7 @@ function auth_register(PDO $pdo, array $input): void
 
     $profileId = (int) $pdo->lastInsertId();
     $otp = auth_store_otp($pdo, $profileId, 'register', false);
+    auth_debug_otp_state($pdo, $profileId, 'register');
     auth_send_otp_email($email, 'register', $otp);
 
     auth_success([
@@ -494,7 +495,7 @@ function auth_token_refresh(PDO $pdo, array $input): void
             auth_error(401, 'AUTH_INVALID_TOKEN', 'Invalid token.');
         }
 
-        $secret = getenv('JWT_SECRET') ?: '';
+        $secret = auth_jwt_secret();
         if ($secret === '') {
             $pdo->rollBack();
             auth_error(500, 'INTERNAL_ERROR', 'JWT secret is not configured.');
@@ -602,4 +603,69 @@ function auth_password_reset(PDO $pdo, array $input): void
     $revokeAll->execute([':profile_id' => (int) $profile['profile_id']]);
 
     auth_success(['status' => 'password_reset']);
+}
+
+function auth_jwt_secret(): string
+{
+    $secret = trim((string) (getenv('JWT_SECRET') ?: ''));
+    if ($secret !== '') {
+        return $secret;
+    }
+
+    $configPath = dirname(__DIR__) . '/config/app.php';
+    if (is_file($configPath)) {
+        $config = require $configPath;
+        if (is_array($config)) {
+            $fallback = trim((string) ($config['jwt_secret'] ?? ''));
+            if ($fallback !== '') {
+                return $fallback;
+            }
+        }
+    }
+
+    return '';
+}
+
+function auth_utc_now_ts(): int
+{
+    return time();
+}
+
+function auth_utc_datetime_to_ts(string $datetime): int
+{
+    $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $datetime, new DateTimeZone('UTC'));
+    if ($dt instanceof DateTimeImmutable) {
+        return $dt->getTimestamp();
+    }
+    $fallback = strtotime($datetime . ' UTC');
+    return $fallback !== false ? $fallback : 0;
+}
+
+function auth_debug_otp_state(PDO $pdo, int $profileId, string $context): void
+{
+    $enabled = strtolower(trim((string) (getenv('AUTH_DEBUG_OTP') ?: '')));
+    if (!in_array($enabled, ['1', 'true', 'yes', 'on'], true)) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT profile_id, otp_last_sent_at, otp_expires_at, UTC_TIMESTAMP() AS db_utc_now
+         FROM profile
+         WHERE profile_id = :profile_id
+         LIMIT 1'
+    );
+    $stmt->execute([':profile_id' => $profileId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return;
+    }
+
+    error_log('[AUTH_DEBUG_OTP] ' . json_encode([
+        'context' => $context,
+        'profile_id' => (int) $row['profile_id'],
+        'otp_last_sent_at' => $row['otp_last_sent_at'],
+        'otp_expires_at' => $row['otp_expires_at'],
+        'db_utc_now' => $row['db_utc_now'],
+        'php_utc_now' => gmdate('Y-m-d H:i:s'),
+    ], JSON_UNESCAPED_SLASHES));
 }

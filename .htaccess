@@ -1,0 +1,7 @@
+RewriteEngine On
+RewriteRule ^home$ home/index.php [QSA,L]
+DirectorySlash Off
+
+SetEnv JWT_SECRET "jhsfd723rnksdf_fsdf_sdf?sd??sdfw4t?wfr:g.,sdfl9f"
+SetEnv APP_ENV "local"
+SetEnv AUTH_FIXED_OTP "123456"
