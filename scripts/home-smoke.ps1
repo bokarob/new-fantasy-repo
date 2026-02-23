@@ -139,15 +139,15 @@ Write-Host ""
 $authHeaders = @{ Authorization = "Bearer $token" }
 
 Write-Host "2) GET /home -> expect 200 + ETag + Cache-Control"
-$home = Invoke-ApiRequest -Method GET -Url "$BaseUrl/home" -Headers $authHeaders
-$etag = Get-HeaderValue -Headers $home.headers -Name "ETag"
-$cacheControl = Get-HeaderValue -Headers $home.headers -Name "Cache-Control"
-if ($home.status -eq 200 -and $etag -and $cacheControl -eq "private, must-revalidate") {
+$homeResp = Invoke-ApiRequest -Method GET -Url "$BaseUrl/home" -Headers $authHeaders
+$etag = Get-HeaderValue -Headers $homeResp.headers -Name "ETag"
+$cacheControl = Get-HeaderValue -Headers $homeResp.headers -Name "Cache-Control"
+if ($homeResp.status -eq 200 -and $etag -and $cacheControl -eq "private, must-revalidate") {
     Write-Host "PASS: /home 200 with required cache headers."
 } else {
     Write-Host "FAIL: /home expected 200 + ETag + Cache-Control private,must-revalidate."
 }
-Write-Host "Status: $($home.status)"
+Write-Host "Status: $($homeResp.status)"
 Write-Host "ETag: $etag"
 Write-Host "Cache-Control: $cacheControl"
 Write-Host ""
@@ -167,9 +167,9 @@ Write-Host "Status: $($resp304.status)"
 Write-Host ""
 
 $validLeagueId = $null
-if ($home.status -eq 200) {
+if ($homeResp.status -eq 200) {
     try {
-        $homeObj = $home.body | ConvertFrom-Json
+        $homeObj = $homeResp.body | ConvertFrom-Json
         if ($homeObj.data.league_selector.leagues.Count -gt 0) {
             $validLeagueId = [int]$homeObj.data.league_selector.leagues[0].league_id
         }
