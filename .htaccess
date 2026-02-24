@@ -1,5 +1,6 @@
 RewriteEngine On
 RewriteRule ^leagues/([0-9]+)/team$ leagues/team/index.php?league_id=$1 [QSA,L]
+RewriteRule ^leagues/([0-9]+)/team/builder$ leagues/team/builder/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/team/captain$ leagues/team/captain/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/transfers/quote$ leagues/transfers/quote/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/transfers/confirm$ leagues/transfers/confirm/index.php?league_id=$1 [QSA,L]

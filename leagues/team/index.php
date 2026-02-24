@@ -6,6 +6,9 @@ header('Content-Type: application/json; charset=utf-8');
 
 try {
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($method === 'POST') {
+        team_handle_create_post();
+    }
     if ($method !== 'GET') {
         team_error(404, 'BAD_REQUEST', 'Endpoint not found.');
     }
@@ -97,6 +100,167 @@ try {
     team_error(500, 'INTERNAL_ERROR', 'Unexpected server error.');
 }
 
+function team_handle_create_post(): void
+{
+    header('Cache-Control: no-store');
+
+    $leagueId = team_resolve_league_id();
+    $pdo = team_db();
+    $profileId = team_require_auth_profile_id();
+    $schema = team_schema_info($pdo);
+
+    if (!team_league_exists($pdo, $leagueId)) {
+        team_error(404, 'LEAGUE_NOT_FOUND', 'League not found.');
+    }
+
+    $gw = team_current_gameweek($pdo, $leagueId);
+    if ($gw === null) {
+        team_error(409, 'GW_NOT_AVAILABLE', 'League GW not initialized.');
+    }
+
+    if (!(bool) $gw['is_open']) {
+        team_error(409, 'TEAM_CREATION_NOT_ALLOWED', 'Team creation is not allowed for this gameweek.');
+    }
+
+    $existing = team_competitor($pdo, $profileId, $leagueId, $schema);
+    if ($existing !== null) {
+        team_error(409, 'TEAM_ALREADY_EXISTS', 'Team already exists for this user in this league.');
+    }
+
+    $input = team_json_input();
+    if (!array_key_exists('teamname', $input) || !array_key_exists('player_ids', $input) || !array_key_exists('captain_player_id', $input) || !array_key_exists('favorite_team_id', $input)) {
+        team_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+
+    $teamname = team_validate_teamname($input['teamname']);
+    $playerIds = team_validate_player_ids($input['player_ids']);
+    $captainPlayerId = team_required_int($input['captain_player_id']);
+    $favoriteTeamId = team_required_int($input['favorite_team_id']);
+
+    $playerRows = team_player_rows_for_creation($pdo, $leagueId, $playerIds);
+    if (count($playerRows) !== count($playerIds)) {
+        team_error(404, 'PLAYER_NOT_FOUND', 'Player not found.');
+    }
+    $playerById = [];
+    foreach ($playerRows as $row) {
+        $playerById[(int) $row['player_id']] = $row;
+    }
+    foreach ($playerIds as $pid) {
+        if (!isset($playerById[$pid])) {
+            team_error(404, 'PLAYER_NOT_FOUND', 'Player not found.');
+        }
+    }
+
+    if (!team_favorite_team_valid($pdo, $leagueId, $favoriteTeamId)) {
+        team_error(422, 'FAVORITE_TEAM_INVALID', 'Invalid favorite team.');
+    }
+
+    $captainPos = array_search($captainPlayerId, $playerIds, true);
+    if ($captainPos === false) {
+        team_error(422, 'CAPTAIN_INVALID', 'Captain must be in roster.');
+    }
+    if ((int) $captainPos >= 6) {
+        team_error(422, 'CAPTAIN_NOT_STARTER', 'Captain must be selected from starters.');
+    }
+
+    $teamCounts = [];
+    foreach ($playerIds as $pid) {
+        $teamId = (int) $playerById[$pid]['team_id'];
+        if (!isset($teamCounts[$teamId])) {
+            $teamCounts[$teamId] = 0;
+        }
+        $teamCounts[$teamId]++;
+        if ($teamCounts[$teamId] > 2) {
+            team_error(422, 'MAX_PLAYERS_FROM_TEAM', 'Max 2 players from the same team.');
+        }
+    }
+
+    $priceMap = team_price_map($pdo, $playerIds, (int) $gw['gw'], $schema);
+    $totalCost = 0.0;
+    foreach ($playerIds as $pid) {
+        $totalCost += (float) ($priceMap[$pid] ?? 0.0);
+    }
+    if ($totalCost > 80.0) {
+        team_error(422, 'INITIAL_BUDGET_EXCEEDED', 'Initial budget exceeded.');
+    }
+    $credits = round(80.0 - $totalCost, 1);
+
+    try {
+        $pdo->beginTransaction();
+
+        $columns = ['profile_id', 'league_id', 'teamname', 'credits', 'favorite_team_id'];
+        $values = [':profile_id', ':league_id', ':teamname', ':credits', ':favorite_team_id'];
+        $params = [
+            ':profile_id' => $profileId,
+            ':league_id' => $leagueId,
+            ':teamname' => $teamname,
+            ':credits' => $credits,
+            ':favorite_team_id' => $favoriteTeamId,
+        ];
+        if ($schema['competitor.favorite_team_changed'] ?? false) {
+            $columns[] = 'favorite_team_changed';
+            $values[] = ':favorite_team_changed';
+            $params[':favorite_team_changed'] = 0;
+        }
+
+        $insertCompetitor = $pdo->prepare(
+            'INSERT INTO competitor (' . implode(',', $columns) . ')
+             VALUES (' . implode(',', $values) . ')'
+        );
+        $insertCompetitor->execute($params);
+        $competitorId = (int) $pdo->lastInsertId();
+
+        if ($competitorId <= 0) {
+            throw new RuntimeException('COMPETITOR_CREATE_FAILED');
+        }
+
+        $insertRoster = $pdo->prepare(
+            'INSERT INTO roster (competitor_id, gameweek, player1, player2, player3, player4, player5, player6, player7, player8, captain)
+             VALUES (:competitor_id, :gw, :player1, :player2, :player3, :player4, :player5, :player6, :player7, :player8, :captain)'
+        );
+        $insertRoster->execute([
+            ':competitor_id' => $competitorId,
+            ':gw' => (int) $gw['gw'],
+            ':player1' => $playerIds[0],
+            ':player2' => $playerIds[1],
+            ':player3' => $playerIds[2],
+            ':player4' => $playerIds[3],
+            ':player5' => $playerIds[4],
+            ':player6' => $playerIds[5],
+            ':player7' => $playerIds[6],
+            ':player8' => $playerIds[7],
+            ':captain' => $captainPlayerId,
+        ]);
+
+        $pdo->commit();
+
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        echo json_encode([
+            'meta' => [
+                'server_time' => $now,
+                'league_id' => $leagueId,
+                'current_gw' => (int) $gw['gw'],
+                'last_updated' => $now,
+                'etag' => null,
+            ],
+            'data' => [
+                'competitor_id' => $competitorId,
+                'teamname' => $teamname,
+                'credits' => $credits,
+            ],
+        ], JSON_UNESCAPED_SLASHES);
+        exit;
+    } catch (Throwable $txe) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        if ($txe instanceof PDOException && $txe->getCode() === '23000') {
+            team_error(409, 'TEAM_ALREADY_EXISTS', 'Team already exists for this user in this league.');
+        }
+        team_error(500, 'INTERNAL_ERROR', 'Unexpected server error.');
+    }
+}
+
 function team_resolve_league_id(): int
 {
     $raw = null;
@@ -145,6 +309,106 @@ function team_error(int $status, string $code, string $message): void
         ],
     ], JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+function team_json_input(): array
+{
+    $raw = file_get_contents('php://input');
+    if ($raw === false || trim($raw) === '') {
+        team_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        team_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+    return $decoded;
+}
+
+function team_required_int($value): int
+{
+    if (is_int($value)) {
+        $n = $value;
+    } elseif (is_string($value) && ctype_digit($value)) {
+        $n = (int) $value;
+    } else {
+        team_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+    if ($n <= 0) {
+        team_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+    return $n;
+}
+
+function team_validate_teamname($value): string
+{
+    if (!is_string($value)) {
+        team_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+    $name = trim($value);
+    if ($name === '' || strlen($name) > 50) {
+        team_error(422, 'TEAMNAME_INVALID', 'Invalid team name.');
+    }
+    if (!preg_match("/^[A-Za-z0-9 ._\\-']+$/", $name)) {
+        team_error(422, 'TEAMNAME_INVALID', 'Invalid team name.');
+    }
+    return $name;
+}
+
+function team_validate_player_ids($value): array
+{
+    if (!is_array($value)) {
+        team_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+    if (count($value) !== 8) {
+        team_error(422, 'ROSTER_INVALID_SIZE', 'Roster must contain exactly 8 players.');
+    }
+
+    $playerIds = [];
+    foreach ($value as $item) {
+        $playerIds[] = team_required_int($item);
+    }
+
+    if (count(array_unique($playerIds)) !== 8) {
+        team_error(422, 'ROSTER_INVALID_POSITION', 'Invalid roster ordering.');
+    }
+    return array_values($playerIds);
+}
+
+function team_player_rows_for_creation(PDO $pdo, int $leagueId, array $playerIds): array
+{
+    if (empty($playerIds)) {
+        return [];
+    }
+    $bind = [];
+    $params = [':league_id' => $leagueId];
+    foreach ($playerIds as $idx => $pid) {
+        $k = ':p' . $idx;
+        $bind[] = $k;
+        $params[$k] = $pid;
+    }
+    $stmt = $pdo->prepare(
+        'SELECT player_id, team_id
+         FROM player
+         WHERE league_id = :league_id
+           AND player_id IN (' . implode(',', $bind) . ')'
+    );
+    $stmt->execute($params);
+    return $stmt->fetchAll() ?: [];
+}
+
+function team_favorite_team_valid(PDO $pdo, int $leagueId, int $favoriteTeamId): bool
+{
+    $stmt = $pdo->prepare(
+        'SELECT 1
+         FROM team
+         WHERE league_id = :league_id AND team_id = :team_id
+         LIMIT 1'
+    );
+    $stmt->execute([
+        ':league_id' => $leagueId,
+        ':team_id' => $favoriteTeamId,
+    ]);
+    return (bool) $stmt->fetchColumn();
 }
 
 function team_schema_info(PDO $pdo): array
