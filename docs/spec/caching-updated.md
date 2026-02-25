@@ -91,6 +91,7 @@ Cache-Control: no-store
 | `/notifications/{notification_id}/read` | POST | C | `no-store` | No | n/a |
 | `/notifications/read-all` *(optional v1)* | POST | C | `no-store` | No | n/a |
 | `/leagues/{league_id}/team` | GET | A | `private, must-revalidate` | Yes | **User + League + Current GW** |
+| `/leagues/{league_id}/transfers` | GET | A | `private, must-revalidate` | Yes | **User + League (+ query params)** |
 | `/leagues/{league_id}/team` | DELETE | C | `no-store` | No | n/a |
 | `/leagues/{league_id}/matches?gw={gw}` | GET | A | `private, must-revalidate` | Yes | **League + GW** |
 | `/leagues/{league_id}/matches/{match_id}` | GET | A | `private, must-revalidate` | Yes | **League + Match** |
@@ -128,6 +129,7 @@ Recommended endpoints:
 - `GET /me/teams`
 - `GET /notifications`
 - `GET /leagues/{league_id}/team`
+- `GET /leagues/{league_id}/transfers`
 - `GET /leagues/{league_id}/matches?gw={gw}`
 - `GET /leagues/{league_id}/matches/{match_id}`
 - `GET /leagues/{league_id}/table`

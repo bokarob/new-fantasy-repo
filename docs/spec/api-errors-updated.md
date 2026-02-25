@@ -401,6 +401,21 @@ Client rules on **success**:
 
 ---
 
+## 6.1) GET /leagues/{league_id}/transfers
+
+| HTTP | code | When | Client action |
+|---:|---|---|---|
+| 400 | BAD_REQUEST | Invalid `gw` / `limit` / `offset` query params | Toast |
+| 401 | AUTH_REQUIRED | Missing/expired access token | Navigate to Login |
+| 401 | AUTH_INVALID_TOKEN | Invalid/expired token format/signature | Navigate to Login |
+| 404 | LEAGUE_NOT_FOUND | League not found | Toast + Navigate |
+| 409 | NO_COMPETITOR | User has no team in this league | Navigate to Team creation |
+| 409 | GW_NOT_AVAILABLE | No gameweek rows for league | Toast |
+| 500 | INTERNAL_ERROR | Unexpected server error | Toast |
+
+Notes:
+- Supports conditional requests; if `If-None-Match` matches current ETag, return `304 Not Modified` (not an error).
+
 ## 7) GET /leagues/{league_id}/fantasy
 
 | HTTP | code | When | Client action |
@@ -790,4 +805,3 @@ Notes:
 Client rule on success:
 - Toast “Sent”
 - Clear form fields (subject/message)
-

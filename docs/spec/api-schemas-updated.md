@@ -651,6 +651,60 @@ Caching: Category A (ETag + must-revalidate).
 
 
 7. Transfers
+### GET /leagues/{league_id}/transfers
+
+Optional query params:
+- `gw` (int, optional)
+- `limit` (int, optional; default 50; max 200)
+- `offset` (int, optional; default 0)
+
+Response:
+```json
+{
+  "meta": {
+    "server_time": "ISO-8601 UTC",
+    "league_id": 1,
+    "current_gw": 12,
+    "last_updated": "ISO-8601 UTC",
+    "etag": "W/\"transfers-u123-l1-gw0-1707312400\""
+  },
+  "data": {
+    "league_id": 1,
+    "competitor_id": 9001,
+    "current_gw": 12,
+    "transfers_allowed": 2,
+    "transfers_used": 1,
+    "is_free_gw": false,
+    "free_transfer_gw": 10,
+    "filter": { "gw": null },
+    "items": [
+      {
+        "transfer_id": 70001,
+        "gw": 12,
+        "is_free": false,
+        "outgoing": {
+          "player": { "player_id": 123, "name": "John Example" },
+          "team": { "team_id": 34, "short": "SKC", "logo_url": "..." }
+        },
+        "incoming": {
+          "player": { "player_id": 456, "name": "Jane Example" },
+          "team": { "team_id": 12, "short": "ABC", "logo_url": "..." }
+        }
+      }
+    ],
+    "total": 12,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+Field notes:
+- `items` are sorted newest-first (`transfer_id DESC`).
+- `is_free = true` when the transfer row has `normal = 0`.
+
+Caching: Category A (ETag + must-revalidate) — ETag scope: **User + League (+ query params)**.
+
 ### POST /leagues/{league_id}/transfers/quote
 
 Request:
