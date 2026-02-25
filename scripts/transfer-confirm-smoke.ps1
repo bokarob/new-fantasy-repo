@@ -18,7 +18,7 @@ function Invoke-CurlRequest {
     $jsonFile = $null
 
     try {
-        $args = @('-s', '-o', $bodyFile, '-D', $headerFile, '-X', $Method, $Url)
+        $args = @('-g', '-s', '-o', $bodyFile, '-D', $headerFile, '-X', $Method, $Url)
         foreach ($h in $Headers) { $args += @('-H', $h) }
         if ($null -ne $JsonBody) {
             $jsonFile = Join-Path $env:TEMP ("confirm-smoke-j-" + [guid]::NewGuid().ToString() + ".json")
@@ -49,6 +49,105 @@ function Header-Value {
     $m = [regex]::Match($Headers, "(?im)^" + [regex]::Escape($Name) + ":\s*(.+)$")
     if ($m.Success) { return $m.Groups[1].Value.Trim() }
     return $null
+}
+
+function Pick-IncomingFromMarket {
+    param(
+        [string]$BaseUrl,
+        [int]$LeagueId,
+        [string]$Token,
+        [int]$OutgoingPlayerId
+    )
+
+    $url = "$BaseUrl/leagues/$LeagueId/market/players?limit=100&offset=0&sort=price_asc&outgoing_player_ids%5B%5D=$OutgoingPlayerId&outgoing_player_ids[]=$OutgoingPlayerId"
+    $resp = Invoke-CurlRequest -Method GET -Url $url -Headers @("Authorization: Bearer $Token")
+    if ($resp.status -eq 422 -and $resp.body -match '"MARKET_CONTEXT_INVALID"') {
+        $retryUrl = "$BaseUrl/leagues/$LeagueId/market/players?limit=100&offset=0&sort=price_asc&outgoing_player_ids%5B%5D=$OutgoingPlayerId"
+        $resp = Invoke-CurlRequest -Method GET -Url $retryUrl -Headers @("Authorization: Bearer $Token")
+    }
+    $out = @{
+        incoming = $null
+        diagnostic = @{
+            status = $resp.status
+            context_exists = $false
+            available_credits = $null
+            items = @()
+        }
+    }
+    if ($resp.status -ne 200) {
+        return $out
+    }
+
+    try {
+        $obj = $resp.body | ConvertFrom-Json
+        $items = @()
+        foreach ($tmp in $obj.data.items) {
+            $items += ,$tmp
+        }
+        $out['diagnostic']['context_exists'] = ($null -ne $obj.data.context)
+        if ($null -ne $obj.data.context) {
+            $out['diagnostic']['available_credits'] = $obj.data.context.available_credits
+        }
+        foreach ($it in $items | Select-Object -First 10) {
+            $diagReasons = @()
+            if ($null -ne $it.availability.disabled_reasons) {
+                $diagReasons = @($it.availability.disabled_reasons)
+            }
+            $out['diagnostic']['items'] += @{
+                player_id = [int]$it.player_id
+                price = $it.price
+                disabled_reasons = $diagReasons
+            }
+        }
+        foreach ($it in $items) {
+            if ($null -eq $it.availability) { continue }
+            $candidatePlayerId = 0
+            [void][int]::TryParse([string]$it.player_id, [ref]$candidatePlayerId)
+            $canSelectRaw = $it.availability.can_select
+            $canSelect = ($canSelectRaw -eq $true -or [string]$canSelectRaw -eq "True" -or [string]$canSelectRaw -eq "1")
+            if ($canSelect -and $candidatePlayerId -ne $OutgoingPlayerId) {
+                $out['incoming'] = $candidatePlayerId
+                return $out
+            }
+        }
+    } catch {}
+
+    return $out
+}
+
+function Pick-TransferPairFromMarket {
+    param(
+        [string]$BaseUrl,
+        [int]$LeagueId,
+        [string]$Token,
+        [object[]]$Positions
+    )
+
+    $candidates = @(
+        $Positions |
+            Sort-Object -Property @{ Expression = { [double]($_.price) }; Descending = $true } |
+            Select-Object -First 8
+    )
+
+    $lastDiag = $null
+    foreach ($p in $candidates) {
+        $outgoingId = [int]$p.player.player_id
+        $pick = Pick-IncomingFromMarket -BaseUrl $BaseUrl -LeagueId $LeagueId -Token $Token -OutgoingPlayerId $outgoingId
+        $lastDiag = $pick['diagnostic']
+        if ($null -ne $pick['incoming']) {
+            return @{
+                outgoing = $outgoingId
+                incoming = [int]$pick['incoming']
+                diagnostic = $lastDiag
+            }
+        }
+    }
+
+    return @{
+        outgoing = $null
+        incoming = $null
+        diagnostic = $lastDiag
+    }
 }
 
 Write-Host "Transfer confirm smoke checks for TASK-004B"
@@ -120,12 +219,24 @@ $teamBeforeObj = $teamBefore.body | ConvertFrom-Json
 $rosterBefore = @($teamBeforeObj.data.roster.positions | ForEach-Object { [int]$_.player.player_id })
 $gw = [int]$teamBeforeObj.meta.current_gw
 
-$outgoing = $rosterBefore[0]
-$incoming = $null
-for ($i = 1; $i -le 300; $i++) {
-    if ($rosterBefore -notcontains $i) { $incoming = $i; break }
+$pair = Pick-TransferPairFromMarket -BaseUrl $BaseUrl -LeagueId $leagueId -Token $token -Positions @($teamBeforeObj.data.roster.positions)
+$outgoing = $pair['outgoing']
+$incoming = $pair['incoming']
+if ($null -eq $incoming -or $null -eq $outgoing) {
+    Write-Host "SKIP: no selectable incoming player found from /market/players."
+    Write-Host "Diagnostics:"
+    if ($null -ne $pair['diagnostic']) {
+        Write-Host "  market status: $($pair['diagnostic'].status)"
+        Write-Host "  context exists: $($pair['diagnostic'].context_exists)"
+        Write-Host "  available_credits: $($pair['diagnostic'].available_credits)"
+        Write-Host "  first 10 items:"
+        foreach ($it in @($pair['diagnostic'].items)) {
+            $reasons = @($it.disabled_reasons) -join ","
+            Write-Host "    player_id=$($it.player_id) price=$($it.price) disabled_reasons=[$reasons]"
+        }
+    }
+    exit 0
 }
-if ($null -eq $incoming) { $incoming = 99999 }
 
 Write-Host "4) Optional quote pre-check"
 $quoteResp = Invoke-CurlRequest -Method POST -Url "$BaseUrl/leagues/$leagueId/transfers/quote" -Headers @(
@@ -180,12 +291,11 @@ if ($confirmResp.status -eq 200) {
 
 Write-Host "7) Transfer limit check (skip if free_gw)"
 $isFreeGw = $false
-$freeCheck = Invoke-CurlRequest -Method GET -Url "$BaseUrl/home?league_id=$leagueId" -Headers @("Authorization: Bearer $token")
+$freeCheck = Invoke-CurlRequest -Method GET -Url "$BaseUrl/leagues/$leagueId/transfers?gw=$gw&limit=1" -Headers @("Authorization: Bearer $token")
 if ($freeCheck.status -eq 200) {
     try {
         $fc = $freeCheck.body | ConvertFrom-Json
-        # best effort; free_gw not in /home contract, so keep false by default
-        $isFreeGw = $false
+        $isFreeGw = [bool]$fc.data.is_free_gw
     } catch {}
 }
 if ($isFreeGw) {
@@ -198,12 +308,24 @@ if ($isFreeGw) {
         if ($teamNow.status -ne 200) { break }
         $tObj = $teamNow.body | ConvertFrom-Json
         $r = @($tObj.data.roster.positions | ForEach-Object { [int]$_.player.player_id })
-        $out = $r[0]
-        $in = $null
-        for ($i = 1; $i -le 300; $i++) {
-            if ($r -notcontains $i) { $in = $i; break }
+        $loopPair = Pick-TransferPairFromMarket -BaseUrl $BaseUrl -LeagueId $leagueId -Token $token -Positions @($tObj.data.roster.positions)
+        $out = $loopPair['outgoing']
+        $in = $loopPair['incoming']
+        if ($null -eq $in -or $null -eq $out) {
+            Write-Host "SKIP: no selectable incoming player found from /market/players."
+            Write-Host "Diagnostics:"
+            if ($null -ne $loopPair['diagnostic']) {
+                Write-Host "  market status: $($loopPair['diagnostic'].status)"
+                Write-Host "  context exists: $($loopPair['diagnostic'].context_exists)"
+                Write-Host "  available_credits: $($loopPair['diagnostic'].available_credits)"
+                Write-Host "  first 10 items:"
+                foreach ($it in @($loopPair['diagnostic'].items)) {
+                    $reasons = @($it.disabled_reasons) -join ","
+                    Write-Host "    player_id=$($it.player_id) price=$($it.price) disabled_reasons=[$reasons]"
+                }
+            }
+            exit 0
         }
-        if ($null -eq $in) { $in = 99999 }
 
         $c = Invoke-CurlRequest -Method POST -Url "$BaseUrl/leagues/$leagueId/transfers/confirm" -Headers @(
             "Authorization: Bearer $token",
