@@ -5,7 +5,11 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 try {
-    if (strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($method === 'PATCH') {
+        me_handle_patch();
+    }
+    if ($method !== 'GET') {
         me_error(404, 'BAD_REQUEST', 'Endpoint not found.');
     }
 
@@ -52,6 +56,66 @@ try {
     me_error(500, 'INTERNAL_ERROR', 'Unexpected server error.');
 }
 
+function me_handle_patch(): void
+{
+    header('Cache-Control: no-store');
+
+    $pdo = me_db();
+    $profileId = me_require_auth_profile_id();
+    $schema = me_schema_info($pdo);
+    $profile = me_profile_row($pdo, $profileId, $schema);
+    if ($profile === null) {
+        me_error(401, 'AUTH_INVALID_TOKEN', 'Invalid token.');
+    }
+
+    $input = me_patch_json_input();
+    $hasAlias = array_key_exists('alias', $input);
+    $hasLang = array_key_exists('lang', $input);
+    if (!$hasAlias && !$hasLang) {
+        me_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+
+    $sets = [];
+    $params = [':profile_id' => $profileId];
+
+    if ($hasAlias) {
+        $sets[] = 'alias = :alias';
+        $params[':alias'] = me_validate_alias($input['alias']);
+    }
+
+    if ($hasLang) {
+        $sets[] = 'lang_id = :lang_id';
+        $params[':lang_id'] = me_validate_and_resolve_lang_id($pdo, $input['lang']);
+    }
+
+    if ($schema['profile.updated_at'] ?? false) {
+        $sets[] = 'updated_at = CURRENT_TIMESTAMP';
+    }
+
+    $stmt = $pdo->prepare(
+        'UPDATE profile
+         SET ' . implode(', ', $sets) . '
+         WHERE profile_id = :profile_id
+         LIMIT 1'
+    );
+    $stmt->execute($params);
+
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    echo json_encode([
+        'meta' => [
+            'server_time' => $now,
+            'league_id' => null,
+            'current_gw' => null,
+            'last_updated' => $now,
+            'etag' => null,
+        ],
+        'data' => [
+            'ok' => true,
+        ],
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 function me_db(): PDO
 {
     $host = getenv('DB_HOST') ?: '127.0.0.1';
@@ -76,6 +140,77 @@ function me_error(int $status, string $code, string $message): void
     http_response_code($status);
     echo json_encode(['error' => ['code' => $code, 'message' => $message]], JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+function me_patch_json_input(): array
+{
+    $raw = file_get_contents('php://input');
+    if ($raw === false || trim($raw) === '') {
+        me_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        me_error(400, 'BAD_REQUEST', 'Invalid payload.');
+    }
+
+    return $decoded;
+}
+
+function me_validate_alias($value): string
+{
+    if (!is_string($value)) {
+        me_error(422, 'VALIDATION_ERROR', 'Invalid alias.');
+    }
+
+    $alias = trim($value);
+    $len = me_unicode_length($alias);
+    if ($alias === '' || $len < 3 || $len > 30) {
+        me_error(422, 'VALIDATION_ERROR', 'Invalid alias.');
+    }
+    if (!preg_match('/^[\p{L}\p{N} ._-]+$/u', $alias)) {
+        me_error(422, 'VALIDATION_ERROR', 'Invalid alias.');
+    }
+
+    return $alias;
+}
+
+function me_validate_and_resolve_lang_id(PDO $pdo, $value): int
+{
+    if (!is_string($value)) {
+        me_error(422, 'VALIDATION_ERROR', 'Invalid lang.');
+    }
+
+    $short = strtolower(trim($value));
+    if (!preg_match('/^[a-z]{2}$/', $short)) {
+        me_error(422, 'VALIDATION_ERROR', 'Invalid lang.');
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT lang_id
+         FROM languages
+         WHERE short = :short
+         LIMIT 1'
+    );
+    $stmt->execute([':short' => $short]);
+    $langId = $stmt->fetchColumn();
+    if ($langId === false || $langId === null) {
+        me_error(422, 'VALIDATION_ERROR', 'Invalid lang.');
+    }
+
+    return (int) $langId;
+}
+
+function me_unicode_length(string $value): int
+{
+    if ($value === '') {
+        return 0;
+    }
+    $count = preg_match_all('/./u', $value, $m);
+    if ($count !== false) {
+        return $count;
+    }
+    return strlen($value);
 }
 
 function me_schema_info(PDO $pdo): array
