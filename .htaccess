@@ -9,6 +9,7 @@ RewriteRule ^leagues/([0-9]+)/transfers/quote$ leagues/transfers/quote/index.php
 RewriteRule ^leagues/([0-9]+)/transfers/confirm$ leagues/transfers/confirm/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/fantasy$ leagues/fantasy/index.php?league_id=$1 [QSA,L]
 RewriteRule ^home$ home/index.php [QSA,L]
+RewriteRule ^me$ me/index.php [QSA,L]
 DirectorySlash Off
 
 SetEnv JWT_SECRET "jhsfd723rnksdf_fsdf_sdf?sd??sdfw4t?wfr:g.,sdfl9f"
