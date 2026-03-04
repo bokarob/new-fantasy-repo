@@ -2,7 +2,7 @@ param(
     [string]$BaseUrl = "http://localhost/new-fantasy-repo",
     [string]$Password = "TestPass123!",
     [string]$Otp = "123456",
-    [int]$LeagueId = 1
+    [int]$LeagueId = 10
 )
 
 function Invoke-CurlRequest {
