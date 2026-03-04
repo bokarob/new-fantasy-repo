@@ -13,6 +13,8 @@ RewriteRule ^leagues/([0-9]+)/matches/([0-9]+)$ leagues/matches/detail/index.php
 RewriteRule ^leagues/([0-9]+)/matches$ leagues/matches/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/table$ leagues/table/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/stats/players$ leagues/stats/players/index.php?league_id=$1 [QSA,L]
+RewriteRule ^leagues/([0-9]+)/private-leagues/([0-9]+)$ leagues/private-leagues/detail/index.php?league_id=$1&privateleague_id=$2 [QSA,L]
+RewriteRule ^leagues/([0-9]+)/private-leagues$ leagues/private-leagues/index.php?league_id=$1 [QSA,L]
 RewriteRule ^home$ home/index.php [QSA,L]
 RewriteRule ^notifications/([0-9]+)/read$ notifications/read/index.php?notification_id=$1 [QSA,L]
 RewriteRule ^notifications/read-all$ notifications/read-all/index.php [QSA,L]
