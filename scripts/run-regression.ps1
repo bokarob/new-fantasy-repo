@@ -58,6 +58,31 @@ $PreferredOrder = @(
   "pl-leave-smoke.ps1"
 )
 
+$ScriptArguments = @{
+  "market-players-smoke.ps1"    = @("-Email", "seed.user2@example.com")
+  "captain-smoke.ps1"           = @("-Email", "seed.user2@example.com")
+  "substitute-smoke.ps1"        = @("-Email", "seed.user2@example.com")
+  "transfer-quote-smoke.ps1"    = @("-Email", "seed.user2@example.com")
+  "transfer-confirm-smoke.ps1"  = @("-Email", "seed.user2@example.com")
+  "transfers-list-smoke.ps1"    = @("-Email", "seed.user2@example.com")
+  "fantasy-smoke.ps1"           = @("-Email", "seed.user2@example.com")
+  "notifications-smoke.ps1"     = @("-Email", "seed.user2@example.com")
+  "notification-read-smoke.ps1" = @("-Email", "seed.user2@example.com")
+  "notification-readall-smoke.ps1" = @("-Email", "seed.user2@example.com")
+  "pl-list-smoke.ps1"           = @("-Email", "seed.user2@example.com")
+  "pl-create-smoke.ps1"         = @("-Email", "seed.user2@example.com")
+  "pl-detail-smoke.ps1"         = @("-Email", "seed.user2@example.com")
+  "pl-invite-search-smoke.ps1"  = @("-Email", "seed.user2@example.com")
+  "pl-invite-smoke.ps1"         = @("-Email", "seed.user2@example.com")
+  "pl-invites-get-smoke.ps1"    = @("-Email", "seed.user3@example.com")
+  "pl-invite-accept-smoke.ps1"  = @("-Email", "seed.user3@example.com")
+  "pl-invite-decline-smoke.ps1" = @("-Email", "seed.user3@example.com")
+  "pl-remove-member-smoke.ps1"  = @("-Email", "seed.user2@example.com")
+  "pl-rename-smoke.ps1"         = @("-Email", "seed.user2@example.com")
+  "pl-delete-smoke.ps1"         = @("-Email", "seed.user2@example.com")
+  "pl-leave-smoke.ps1"          = @("-Email", "seed.user2@example.com")
+}
+
 function Get-ScriptPath([string]$dir, [string]$name) {
   $p = Join-Path $dir $name
   if (Test-Path $p) { return (Resolve-Path $p).Path }
@@ -84,9 +109,15 @@ foreach ($name in $PreferredOrder) {
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
   try {
+    $extraArgs = @()
+    if ($ScriptArguments.ContainsKey($name)) {
+      $extraArgs = @($ScriptArguments[$name])
+    }
+    $argString = (($extraArgs | ForEach-Object { "`"$_`"" }) -join " ")
+
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = (Get-Command powershell).Source
-    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" $argString"
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
     $psi.UseShellExecute = $false
@@ -126,7 +157,7 @@ foreach ($name in $PreferredOrder) {
       Seconds  = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
     }
 
-    Write-Host ("Result: 0 (exit 1) in 2s" -f $status, $code, [Math]::Round($sw.Elapsed.TotalSeconds,2))
+    Write-Host ("Result: {0} (exit {1}) in {2}s" -f $status, $code, [Math]::Round($sw.Elapsed.TotalSeconds,2))
     Write-Host ""
 
     if (($code -ne 0) -and (-not $ContinueOnFail)) {

@@ -1,11 +1,11 @@
 -- phpMyAdmin SQL Dump
--- version 5.2.2
+-- version 5.2.1
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jan 24, 2026 at 10:19 PM
--- Server version: 11.8.3-MariaDB-log
--- PHP Version: 7.2.34
+-- Generation Time: Mar 06, 2026 at 09:12 PM
+-- Server version: 10.4.28-MariaDB
+-- PHP Version: 8.2.4
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -18,7 +18,7 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Database: `u941400841_fantasydb`
+-- Database: `fantasy_app`
 --
 
 -- --------------------------------------------------------
@@ -35,6 +35,23 @@ CREATE TABLE `authorizations` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `auth_refresh_tokens`
+--
+
+CREATE TABLE `auth_refresh_tokens` (
+  `refresh_token_id` bigint(20) NOT NULL,
+  `profile_id` int(11) NOT NULL,
+  `token_hash` varbinary(32) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `expires_at` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00',
+  `revoked_at` timestamp NULL DEFAULT NULL,
+  `last_used_at` timestamp NULL DEFAULT NULL,
+  `device_name` varchar(80) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `competitor`
 --
 
@@ -45,7 +62,8 @@ CREATE TABLE `competitor` (
   `teamname` varchar(50) NOT NULL,
   `credits` decimal(3,1) NOT NULL,
   `favorite_team_id` int(11) DEFAULT NULL,
-  `favorite_team_changed` tinyint(1) DEFAULT NULL
+  `favorite_team_changed` tinyint(1) DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -74,7 +92,8 @@ CREATE TABLE `gameweeks` (
   `gamedate` date NOT NULL,
   `dateto` date NOT NULL,
   `open` tinyint(1) NOT NULL,
-  `updated` tinyint(1) NOT NULL
+  `updated` tinyint(1) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -99,7 +118,27 @@ CREATE TABLE `languages` (
 
 CREATE TABLE `leagues` (
   `league_id` int(2) NOT NULL,
-  `league name` varchar(50) NOT NULL
+  `league name` varchar(50) NOT NULL,
+  `free_transfer_gw` smallint(6) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `leaguetable`
+--
+
+CREATE TABLE `leaguetable` (
+  `league_id` int(11) NOT NULL,
+  `gameweek` smallint(6) NOT NULL,
+  `team_id` int(11) NOT NULL,
+  `win` int(11) NOT NULL DEFAULT 0,
+  `draw` int(11) NOT NULL DEFAULT 0,
+  `loss` int(11) NOT NULL DEFAULT 0,
+  `team_points` int(11) NOT NULL DEFAULT 0,
+  `match_points` int(11) NOT NULL DEFAULT 0,
+  `set_points` int(11) NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -116,7 +155,8 @@ CREATE TABLE `matches` (
   `awayteam` int(11) NOT NULL,
   `link` int(100) NOT NULL,
   `homepoint` decimal(2,1) NOT NULL DEFAULT 0.0,
-  `awaypoint` decimal(2,1) NOT NULL DEFAULT 0.0
+  `awaypoint` decimal(2,1) NOT NULL DEFAULT 0.0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -133,7 +173,8 @@ CREATE TABLE `news` (
   `full_content` text NOT NULL,
   `live` tinyint(1) NOT NULL,
   `published_on` date NOT NULL,
-  `image` varchar(255) NOT NULL
+  `image` varchar(255) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -175,11 +216,17 @@ CREATE TABLE `newsletter_templates` (
 
 CREATE TABLE `notification` (
   `notification_id` int(11) NOT NULL,
-  `notification_type` varchar(2) NOT NULL,
+  `notification_type` varchar(32) NOT NULL,
   `profile_id` int(11) NOT NULL,
   `gameweek` int(3) NOT NULL,
   `picture_id` int(3) NOT NULL,
-  `mark_read` tinyint(1) NOT NULL DEFAULT 0
+  `mark_read` tinyint(1) NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `read_at` timestamp NULL DEFAULT NULL,
+  `target_kind` varchar(32) DEFAULT NULL,
+  `target_league_id` int(11) DEFAULT NULL,
+  `target_params` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`target_params`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -189,7 +236,7 @@ CREATE TABLE `notification` (
 --
 
 CREATE TABLE `notificationtext` (
-  `notification_type` varchar(2) NOT NULL,
+  `notification_type` varchar(32) NOT NULL,
   `lang_id` int(1) NOT NULL,
   `text` text NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -201,7 +248,7 @@ CREATE TABLE `notificationtext` (
 --
 
 CREATE TABLE `notificationtype` (
-  `notification_type` varchar(2) NOT NULL,
+  `notification_type` varchar(32) NOT NULL,
   `name` varchar(50) NOT NULL,
   `navigation` text NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -265,7 +312,8 @@ CREATE TABLE `playerresult` (
   `matchpoints` decimal(3,1) NOT NULL,
   `points` decimal(4,1) NOT NULL,
   `opponent_id` int(11) NOT NULL,
-  `opponent_result` int(3) NOT NULL
+  `opponent_result` int(3) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -277,7 +325,8 @@ CREATE TABLE `playerresult` (
 CREATE TABLE `playertrade` (
   `player_id` int(11) NOT NULL,
   `gameweek` int(11) NOT NULL,
-  `price` decimal(4,1) NOT NULL
+  `price` decimal(4,1) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -290,7 +339,8 @@ CREATE TABLE `privateleague` (
   `privateleague_id` int(11) NOT NULL,
   `leaguename` varchar(50) NOT NULL,
   `league_id` int(2) NOT NULL,
-  `admin` int(11) NOT NULL
+  `admin` int(11) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -302,7 +352,14 @@ CREATE TABLE `privateleague` (
 CREATE TABLE `privateleaguemembers` (
   `privateleague_id` int(11) NOT NULL,
   `competitor_id` int(11) NOT NULL,
-  `confirmed` tinyint(1) NOT NULL
+  `confirmed` tinyint(1) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `status` varchar(20) NOT NULL DEFAULT 'member_confirmed',
+  `request_kind` varchar(12) DEFAULT NULL,
+  `requested_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `responded_at` timestamp NULL DEFAULT NULL,
+  `requested_by_profile_id` int(11) DEFAULT NULL,
+  `decided_by_profile_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -325,7 +382,15 @@ CREATE TABLE `profile` (
   `reset_token_expire` datetime DEFAULT NULL,
   `newsletter_subscribe` tinyint(1) DEFAULT NULL,
   `newsletter_subs_timestamp` datetime DEFAULT NULL,
-  `newsletter_unsubscribe_hash` varchar(64) DEFAULT NULL
+  `newsletter_unsubscribe_hash` varchar(64) DEFAULT NULL,
+  `email_verified_at` timestamp NULL DEFAULT NULL,
+  `otp_hash` varbinary(32) DEFAULT NULL,
+  `otp_expires_at` timestamp NULL DEFAULT NULL,
+  `otp_attempts` smallint(6) NOT NULL DEFAULT 0,
+  `otp_last_sent_at` timestamp NULL DEFAULT NULL,
+  `otp_resend_count` smallint(6) NOT NULL DEFAULT 0,
+  `otp_purpose` varchar(20) DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -345,7 +410,8 @@ CREATE TABLE `roster` (
   `player6` int(11) NOT NULL,
   `player7` int(11) NOT NULL,
   `player8` int(11) NOT NULL,
-  `captain` int(11) NOT NULL
+  `captain` int(11) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -371,7 +437,8 @@ CREATE TABLE `team` (
 CREATE TABLE `teamranking` (
   `competitor_id` int(11) NOT NULL,
   `gameweek` int(3) NOT NULL,
-  `rank` int(3) NOT NULL
+  `rank` int(3) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -383,7 +450,8 @@ CREATE TABLE `teamranking` (
 CREATE TABLE `teamresult` (
   `competitor_id` int(11) NOT NULL,
   `gameweek` int(3) NOT NULL,
-  `weeklypoints` decimal(5,1) NOT NULL
+  `weeklypoints` decimal(5,1) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -398,7 +466,8 @@ CREATE TABLE `transfers` (
   `gameweek` int(3) NOT NULL,
   `playerout` int(11) NOT NULL,
   `playerin` int(11) NOT NULL,
-  `normal` tinyint(1) NOT NULL DEFAULT 1
+  `normal` tinyint(1) NOT NULL DEFAULT 1,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -487,68 +556,6 @@ CREATE TABLE `votingtopics` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
--- Table structure for table `leaguetable`
---
-
-CREATE TABLE leaguetable (
-  league_id     INT NOT NULL,
-  gameweek      SMALLINT NOT NULL,
-  team_id       INT NOT NULL,
-
-  win           INT NOT NULL DEFAULT 0,
-  draw          INT NOT NULL DEFAULT 0,
-  loss          INT NOT NULL DEFAULT 0,
-
-  team_points   INT NOT NULL DEFAULT 0,
-  match_points  INT NOT NULL DEFAULT 0,
-  set_points    INT NOT NULL DEFAULT 0,
-
-  updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-               ON UPDATE CURRENT_TIMESTAMP,
-
-  PRIMARY KEY (league_id, gameweek, team_id),
-
-  -- Useful for “table view per GW”
-  INDEX idx_leaguetable_league_gw (league_id, gameweek),
-
-  -- Useful for ordering / partial optimizations (sorting still happens, but helps scans)
-  INDEX idx_leaguetable_sort (league_id, gameweek, team_points, match_points, set_points)
-);
-
---
--- Table structure for table `auth_refresh_tokens`
---
-
-CREATE TABLE auth_refresh_tokens (
-  refresh_token_id BIGINT NOT NULL AUTO_INCREMENT,
-  profile_id       INT NOT NULL,
-
-  -- SHA-256 hash of the refresh token (32 bytes). Store hash, never raw token.
-  token_hash       VARBINARY(32) NOT NULL,
-
-  created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  expires_at       TIMESTAMP NOT NULL,
-
-  revoked_at       TIMESTAMP NULL DEFAULT NULL,
-  last_used_at     TIMESTAMP NULL DEFAULT NULL,
-
-  -- Optional but useful for session management UX / debugging
-  device_name      VARCHAR(80) NULL DEFAULT NULL,
-
-  PRIMARY KEY (refresh_token_id),
-
-  -- Ensure a token hash can’t exist twice
-  UNIQUE KEY uq_auth_refresh_token_hash (token_hash),
-
-  -- Fast lookup for “list active sessions” or cleanup jobs
-  INDEX idx_auth_refresh_profile (profile_id, revoked_at, expires_at),
-  INDEX idx_auth_refresh_expires (expires_at)
-
- 
-);
-
-
---
 -- Indexes for dumped tables
 --
 
@@ -557,6 +564,15 @@ CREATE TABLE auth_refresh_tokens (
 --
 ALTER TABLE `authorizations`
   ADD PRIMARY KEY (`authorization`);
+
+--
+-- Indexes for table `auth_refresh_tokens`
+--
+ALTER TABLE `auth_refresh_tokens`
+  ADD PRIMARY KEY (`refresh_token_id`),
+  ADD UNIQUE KEY `uq_auth_refresh_token_hash` (`token_hash`),
+  ADD KEY `idx_auth_refresh_profile` (`profile_id`,`revoked_at`,`expires_at`),
+  ADD KEY `idx_auth_refresh_expires` (`expires_at`);
 
 --
 -- Indexes for table `competitor`
@@ -590,6 +606,14 @@ ALTER TABLE `leagues`
   ADD PRIMARY KEY (`league_id`);
 
 --
+-- Indexes for table `leaguetable`
+--
+ALTER TABLE `leaguetable`
+  ADD PRIMARY KEY (`league_id`,`gameweek`,`team_id`),
+  ADD KEY `idx_leaguetable_league_gw` (`league_id`,`gameweek`),
+  ADD KEY `idx_leaguetable_sort` (`league_id`,`gameweek`,`team_points`,`match_points`,`set_points`);
+
+--
 -- Indexes for table `matches`
 --
 ALTER TABLE `matches`
@@ -617,7 +641,9 @@ ALTER TABLE `newsletter_templates`
 -- Indexes for table `notification`
 --
 ALTER TABLE `notification`
-  ADD PRIMARY KEY (`notification_id`);
+  ADD PRIMARY KEY (`notification_id`),
+  ADD KEY `idx_notification_user_created` (`profile_id`,`created_at`,`notification_id`),
+  ADD KEY `idx_notification_user_read_created` (`profile_id`,`mark_read`,`created_at`,`notification_id`);
 
 --
 -- Indexes for table `notificationtext`
@@ -672,7 +698,9 @@ ALTER TABLE `privateleague`
 -- Indexes for table `privateleaguemembers`
 --
 ALTER TABLE `privateleaguemembers`
-  ADD PRIMARY KEY (`privateleague_id`,`competitor_id`);
+  ADD PRIMARY KEY (`privateleague_id`,`competitor_id`),
+  ADD KEY `idx_plm_privateleague_status` (`privateleague_id`,`status`),
+  ADD KEY `idx_plm_competitor_status` (`competitor_id`,`status`);
 
 --
 -- Indexes for table `profile`
@@ -753,6 +781,12 @@ ALTER TABLE `votingtopics`
 --
 
 --
+-- AUTO_INCREMENT for table `auth_refresh_tokens`
+--
+ALTER TABLE `auth_refresh_tokens`
+  MODIFY `refresh_token_id` bigint(20) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `competitor`
 --
 ALTER TABLE `competitor`
@@ -806,60 +840,6 @@ ALTER TABLE `trollbet`
 ALTER TABLE `votingtopics`
   MODIFY `survey_id` int(11) NOT NULL AUTO_INCREMENT;
 COMMIT;
-
---
--- updated_at columns
---
-
-ALTER TABLE competitor
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE notification
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE privateleague
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE privateleaguemembers
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE roster
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE transfers
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE teamranking
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE teamresult
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE playertrade
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE playerresult
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE matches
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE news
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-ALTER TABLE gameweeks
-  ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-
-
-ALTER TABLE profile
-  ADD COLUMN email_verified_at TIMESTAMP NULL DEFAULT NULL,
-  ADD COLUMN otp_hash VARBINARY(32) NULL DEFAULT NULL,
-  ADD COLUMN otp_expires_at TIMESTAMP NULL DEFAULT NULL,
-  ADD COLUMN otp_attempts SMALLINT NOT NULL DEFAULT 0,
-  ADD COLUMN otp_last_sent_at TIMESTAMP NULL DEFAULT NULL,
-  ADD COLUMN otp_resend_count SMALLINT NOT NULL DEFAULT 0,
-  ADD COLUMN otp_purpose VARCHAR(20) NULL DEFAULT NULL;
-
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;

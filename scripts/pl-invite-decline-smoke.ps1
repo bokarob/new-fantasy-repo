@@ -64,6 +64,28 @@ function Header-Value {
     return $null
 }
 
+function Acquire-AccessToken {
+    param(
+        [string]$BaseUrl,
+        [string]$Email,
+        [string]$Password
+    )
+
+    $loginResp = Invoke-CurlRequest -Method POST -Url "$BaseUrl/auth/login" -Headers @("Content-Type: application/json") -JsonBody @{
+        email = $Email
+        password = $Password
+    }
+    if ($loginResp.status -ne 200) {
+        return $null
+    }
+
+    try {
+        return (($loginResp.body | ConvertFrom-Json).data.tokens.access_token)
+    } catch {
+        return $null
+    }
+}
+
 Write-Host "Private league invite decline smoke checks for TASK-031"
 Write-Host "Base URL: $BaseUrl"
 Write-Host ""
@@ -143,6 +165,60 @@ if ([string]::IsNullOrWhiteSpace($InviteId) -and $invitesResp.status -eq 200) {
         }
     } catch {}
 }
+
+if ([string]::IsNullOrWhiteSpace($InviteId)) {
+    Write-Host "INFO: no pending invite found; creating a fresh one as seeded admin."
+    $competitorId = 0
+    $homeResp = Invoke-CurlRequest -Method GET -Url "$BaseUrl/home" -Headers @("Authorization: Bearer $token")
+    if ($homeResp.status -eq 200) {
+        try {
+            $homeObj = $homeResp.body | ConvertFrom-Json
+            foreach ($leagueRow in @($homeObj.data.league_selector.leagues)) {
+                if ([int]$leagueRow.league_id -eq $LeagueId -and $null -ne $leagueRow.competitor -and $null -ne $leagueRow.competitor.competitor_id) {
+                    $competitorId = [int]$leagueRow.competitor.competitor_id
+                    break
+                }
+            }
+        } catch {}
+    }
+
+    $adminToken = Acquire-AccessToken -BaseUrl $BaseUrl -Email "seed.user2@example.com" -Password $Password
+    if ($competitorId -gt 0 -and $adminToken) {
+        $tmpLeagueName = "PL Decline Smoke " + [int][double]::Parse((Get-Date -UFormat %s))
+        $createResp = Invoke-CurlRequest -Method POST -Url "$BaseUrl/leagues/$LeagueId/private-leagues" -Headers @(
+            "Authorization: Bearer $adminToken",
+            "Content-Type: application/json"
+        ) -JsonBody @{
+            leaguename = $tmpLeagueName
+        }
+
+        $tmpPrivateleagueId = 0
+        if ($createResp.status -eq 200) {
+            try { $tmpPrivateleagueId = [int](($createResp.body | ConvertFrom-Json).data.privateleague_id) } catch {}
+        }
+
+        if ($tmpPrivateleagueId -gt 0) {
+            [void](Invoke-CurlRequest -Method POST -Url "$BaseUrl/leagues/$LeagueId/private-leagues/$tmpPrivateleagueId/invite" -Headers @(
+                "Authorization: Bearer $adminToken",
+                "Content-Type: application/json"
+            ) -JsonBody @{
+                competitor_id = $competitorId
+            })
+
+            $invitesResp = Invoke-CurlRequest -Method GET -Url "$BaseUrl/leagues/$LeagueId/private-leagues/invites" -Headers @("Authorization: Bearer $token")
+            if ($invitesResp.status -eq 200) {
+                try {
+                    $obj = $invitesResp.body | ConvertFrom-Json
+                    $pending = @($obj.data.items | Where-Object { [string]$_.status -eq "pending" })
+                    if ($pending.Count -gt 0) {
+                        $InviteId = [string]$pending[0].invite_id
+                    }
+                } catch {}
+            }
+        }
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($InviteId)) {
     Write-Host "FAIL: no pending invite found. Create one first (TASK-028 flow), then rerun."
     Write-Host "Status: $($invitesResp.status)"
