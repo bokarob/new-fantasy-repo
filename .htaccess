@@ -5,6 +5,7 @@ RewriteRule ^leagues/([0-9]+)/team/captain$ leagues/team/captain/index.php?leagu
 RewriteRule ^leagues/([0-9]+)/team/substitute$ leagues/team/substitute/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/transfers$ leagues/transfers/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/market/players$ leagues/market/players/index.php?league_id=$1 [QSA,L]
+RewriteRule ^leagues/([0-9]+)/players/([0-9]+)$ leagues/players/index.php?league_id=$1&player_id=$2 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/rules$ leagues/rules/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/transfers/quote$ leagues/transfers/quote/index.php?league_id=$1 [QSA,L]
 RewriteRule ^leagues/([0-9]+)/transfers/confirm$ leagues/transfers/confirm/index.php?league_id=$1 [QSA,L]

@@ -44,6 +44,7 @@ $PreferredOrder = @(
   "match-detail-smoke.ps1"
   "table-smoke.ps1"
   "player-stats-smoke.ps1"
+  "player-detail-smoke.ps1"
   "pl-list-smoke.ps1"
   "pl-create-smoke.ps1"
   "pl-detail-smoke.ps1"
@@ -69,6 +70,7 @@ $ScriptArguments = @{
   "notifications-smoke.ps1"     = @("-Email", "seed.user2@example.com")
   "notification-read-smoke.ps1" = @("-Email", "seed.user2@example.com")
   "notification-readall-smoke.ps1" = @("-Email", "seed.user2@example.com")
+  "player-detail-smoke.ps1"    = @("-Email", "seed.user2@example.com")
   "pl-list-smoke.ps1"           = @("-Email", "seed.user2@example.com")
   "pl-create-smoke.ps1"         = @("-Email", "seed.user2@example.com")
   "pl-detail-smoke.ps1"         = @("-Email", "seed.user2@example.com")
