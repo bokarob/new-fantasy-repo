@@ -1,6 +1,6 @@
 # Mobile Technical Architecture
 
-Status: Draft
+Status: Approved
 Owner: Róbert Bóka
 Last updated: 2026-03-07
 
