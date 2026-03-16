@@ -287,9 +287,24 @@ if ($confirmResp.status -eq 200) {
     Write-Host "ETag before: $etagBefore"
     Write-Host "ETag after:  $etagAfter"
     Write-Host ""
+
+    if ($teamAfter.status -eq 200 -and $etagAfter) {
+        Write-Host "7) Revalidate unchanged /team after confirm -> expect 304"
+        $team304 = Invoke-CurlRequest -Method GET -Url "$BaseUrl/leagues/$leagueId/team" -Headers @(
+            "Authorization: Bearer $token",
+            "If-None-Match: $etagAfter"
+        )
+        if ($team304.status -eq 304) {
+            Write-Host "PASS: unchanged post-confirm /team revalidation returned 304."
+        } else {
+            Write-Host "FAIL: expected unchanged post-confirm /team revalidation to return 304."
+        }
+        Write-Host "Status: $($team304.status)"
+        Write-Host ""
+    }
 }
 
-Write-Host "7) Transfer limit check (skip if free_gw)"
+Write-Host "8) Transfer limit check (skip if free_gw)"
 $isFreeGw = $false
 $freeCheck = Invoke-CurlRequest -Method GET -Url "$BaseUrl/leagues/$leagueId/transfers?gw=$gw&limit=1" -Headers @("Authorization: Bearer $token")
 if ($freeCheck.status -eq 200) {
@@ -348,7 +363,7 @@ if ($isFreeGw) {
 }
 Write-Host ""
 
-Write-Host "8) No token confirm -> 401 AUTH_REQUIRED"
+Write-Host "9) No token confirm -> 401 AUTH_REQUIRED"
 $noToken = Invoke-CurlRequest -Method POST -Url "$BaseUrl/leagues/$leagueId/transfers/confirm" -Headers @("Content-Type: application/json") -JsonBody @{
     outgoing_player_ids = @($outgoing)
     incoming_player_ids = @($incoming)
@@ -361,7 +376,7 @@ if ($noToken.status -eq 401 -and $noToken.body -match '"AUTH_REQUIRED"') {
 Write-Host "Status: $($noToken.status)"
 Write-Host ""
 
-Write-Host "9) Invalid league confirm -> 404 LEAGUE_NOT_FOUND"
+Write-Host "10) Invalid league confirm -> 404 LEAGUE_NOT_FOUND"
 $badLeague = Invoke-CurlRequest -Method POST -Url "$BaseUrl/leagues/999999/transfers/confirm" -Headers @(
     "Authorization: Bearer $token",
     "Content-Type: application/json"

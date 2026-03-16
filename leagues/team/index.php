@@ -858,13 +858,43 @@ function team_etag_and_last_updated(
 
 function team_if_none_match_matches(string $etag): bool
 {
-    $header = (string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? '');
+    $header = '';
+    foreach (['HTTP_IF_NONE_MATCH', 'REDIRECT_HTTP_IF_NONE_MATCH', 'If-None-Match'] as $key) {
+        if (!empty($_SERVER[$key])) {
+            $header = trim((string) $_SERVER[$key]);
+            break;
+        }
+    }
+    if ($header === '' && function_exists('getallheaders')) {
+        foreach (getallheaders() as $name => $value) {
+            if (strtolower((string) $name) === 'if-none-match') {
+                $header = trim((string) $value);
+                break;
+            }
+        }
+    }
     if ($header === '') {
         return false;
     }
+    if (trim($header) === '*') {
+        return true;
+    }
+
+    $etagRaw = trim($etag);
+    $etagWeak = preg_replace('/^W\//', '', $etagRaw) ?? $etagRaw;
+    $etagNorm = trim($etagWeak, "\"' \t\r\n");
+
     $parts = array_map('trim', explode(',', $header));
     foreach ($parts as $candidate) {
-        if ($candidate === $etag) {
+        if ($candidate === '') {
+            continue;
+        }
+
+        $candidateRaw = str_replace('\\"', '"', $candidate);
+        $candidateWeak = preg_replace('/^W\//', '', $candidateRaw) ?? $candidateRaw;
+        $candidateNorm = trim($candidateWeak, "\"' \t\r\n");
+
+        if ($candidateRaw === $etagRaw || $candidateWeak === $etagWeak || $candidateNorm === $etagNorm) {
             return true;
         }
     }
