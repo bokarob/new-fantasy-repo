@@ -119,11 +119,13 @@ Write-Host ""
 
 Write-Host "3) PATCH /me alias -> expect 200 + ok:true + no-store + meta.etag null"
 $newAlias = ("patch" + [int][double]::Parse((Get-Date -UFormat %s)))
+$newLang = "EN"
 $patch1 = Invoke-CurlRequest -Method PATCH -Url "$BaseUrl/me" -Headers @(
     "Authorization: Bearer $token",
     "Content-Type: application/json"
 ) -JsonBody @{
     alias = $newAlias
+    lang = $newLang
 }
 $ccPatch = Header-Value -Headers $patch1.headers -Name "Cache-Control"
 $patchOk = $false
@@ -147,20 +149,24 @@ Write-Host "4) GET /me -> alias changed + ETag differs"
 $me2 = Invoke-CurlRequest -Method GET -Url "$BaseUrl/me" -Headers @("Authorization: Bearer $token")
 $etag2 = Header-Value -Headers $me2.headers -Name "ETag"
 $aliasAfter = $null
+$langAfter = $null
 if ($me2.status -eq 200) {
     try {
-        $aliasAfter = ($me2.body | ConvertFrom-Json).data.me.alias
+        $meObj2 = $me2.body | ConvertFrom-Json
+        $aliasAfter = $meObj2.data.me.alias
+        $langAfter = [string]$meObj2.data.me.lang
     } catch {}
 }
 $aliasChanged = $aliasAfter -eq $newAlias
 $etagChanged = $etag2 -and ($etag1 -ne $etag2)
-if ($me2.status -eq 200 -and $aliasChanged -and $etagChanged) {
-    Write-Host "PASS: alias updated and ETag changed."
+if ($me2.status -eq 200 -and $aliasChanged -and $etagChanged -and $langAfter -eq $newLang.ToLowerInvariant()) {
+    Write-Host "PASS: alias/lang updated and ETag changed."
 } else {
     Write-Host "FAIL: alias/ETag post-check failed."
 }
 Write-Host "Status: $($me2.status)"
 Write-Host "Alias after: $aliasAfter"
+Write-Host "Lang after: $langAfter"
 Write-Host "ETag after: $etag2"
 Write-Host ""
 

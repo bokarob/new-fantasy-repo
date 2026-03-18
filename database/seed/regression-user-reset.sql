@@ -107,18 +107,19 @@ SET @sql_clear_admin_otp := CONCAT(
 );
 PREPARE s2b FROM @sql_clear_admin_otp; EXECUTE s2b; DEALLOCATE PREPARE s2b;
 
--- --- Seed 4 profiles (id 1 preserved, add 2..4) ---
+-- --- Seed 5 profiles (id 1 preserved, add 2..5) ---
 -- NOTE: password uses legacy md5(password+email)
 INSERT INTO profile (profile_id, email, password, profilename, alias, picture_id, authorization, lang_id)
 VALUES
 (2, 'seed.user2@example.com', MD5(CONCAT('TestPass123!', 'seed.user2@example.com')), 'Seed User 2', 'seed2', 1, 1, 1),
 (3, 'seed.user3@example.com', MD5(CONCAT('TestPass123!', 'seed.user3@example.com')), 'Seed User 3', 'seed3', 1, 1, 1),
-(4, 'seed.user4@example.com', MD5(CONCAT('TestPass123!', 'seed.user4@example.com')), 'Seed User 4', 'seed4', 1, 1, 1);
+(4, 'seed.user4@example.com', MD5(CONCAT('TestPass123!', 'seed.user4@example.com')), 'Seed User 4', 'seed4', 1, 1, 1),
+(5, 'seed.user5@example.com', MD5(CONCAT('TestPass123!', 'seed.user5@example.com')), 'Seed User 5', 'seed5', 1, 1, 1);
 
 -- Mark seeded users verified if email_verified_at exists
 SET @sql_verify_seeds := IF(
   @has_email_verified > 0,
-  'UPDATE profile SET email_verified_at=UTC_TIMESTAMP() WHERE profile_id IN (2,3,4)',
+  'UPDATE profile SET email_verified_at=UTC_TIMESTAMP() WHERE profile_id IN (2,3,4,5)',
   'SELECT 1'
 );
 PREPARE s3 FROM @sql_verify_seeds; EXECUTE s3; DEALLOCATE PREPARE s3;
@@ -140,7 +141,8 @@ INSERT INTO competitor (competitor_id, profile_id, league_id, teamname, credits,
 VALUES
 (1001, 1, @LEAGUE_ID, 'Admin Seed Team', 20.0, @FAV_TEAM, 0),
 (1002, 2, @LEAGUE_ID, 'Seed Team 2',     20.0, @FAV_TEAM, 0),
-(1003, 3, @LEAGUE_ID, 'Seed Team 3',     20.0, @FAV_TEAM, 0);
+(1003, 3, @LEAGUE_ID, 'Seed Team 3',     20.0, @FAV_TEAM, 0),
+(1005, 5, @LEAGUE_ID, 'Seed Team 5',     20.0, @FAV_TEAM, 0);
 
 -- --- Seed rosters for current gw ---
 INSERT INTO roster (competitor_id, gameweek, player1, player2, player3, player4, player5, player6, player7, player8, captain)
@@ -248,6 +250,34 @@ PREPARE s4 FROM @sql_plm_admin; EXECUTE s4; DEALLOCATE PREPARE s4;
 PREPARE s5 FROM @sql_plm_member; EXECUTE s5; DEALLOCATE PREPARE s5;
 PREPARE s6 FROM @sql_plm_pending; EXECUTE s6; DEALLOCATE PREPARE s6;
 
+-- --- Seed private league with confirmed member lacking rankings for detail fallback verification ---
+INSERT INTO privateleague (privateleague_id, leaguename, league_id, admin)
+VALUES (2002, 'Regression Pending Standings', @LEAGUE_ID, 2);
+
+SET @plm_unranked_cols := @plm_cols;
+SET @plm_unranked_vals := '2002, 1005, 1';
+SET @plm_unranked_vals := CONCAT(@plm_unranked_vals, IF(@has_plm_status > 0, ", 'member_confirmed'", ''));
+SET @plm_unranked_vals := CONCAT(@plm_unranked_vals, IF(@has_plm_request_kind > 0, ", 'invite'", ''));
+SET @plm_unranked_vals := CONCAT(@plm_unranked_vals, IF(@has_plm_requested_by > 0, ', 2', ''));
+SET @plm_unranked_vals := CONCAT(@plm_unranked_vals, IF(@has_plm_decided_by > 0, ', 2', ''));
+SET @plm_unranked_vals := CONCAT(@plm_unranked_vals, IF(@has_plm_responded_at > 0, ', UTC_TIMESTAMP()', ''));
+SET @sql_plm_unranked := CONCAT('INSERT INTO privateleaguemembers (', @plm_unranked_cols, ') VALUES (', @plm_unranked_vals, ')');
+PREPARE s6b FROM @sql_plm_unranked; EXECUTE s6b; DEALLOCATE PREPARE s6b;
+
+-- --- Seed fallback match if base dataset does not include one for league 10 / gw 1 ---
+SET @MATCH_HOME := (SELECT team_id FROM team WHERE league_id=@LEAGUE_ID ORDER BY team_id LIMIT 0,1);
+SET @MATCH_AWAY := (SELECT team_id FROM team WHERE league_id=@LEAGUE_ID ORDER BY team_id LIMIT 1,1);
+SET @HAS_MATCH := (SELECT COUNT(*) FROM matches WHERE league_id=@LEAGUE_ID AND gameweek=@GW);
+SET @sql_match_seed := IF(
+  @HAS_MATCH > 0 OR @MATCH_HOME IS NULL OR @MATCH_AWAY IS NULL,
+  'SELECT 1',
+  CONCAT(
+    'INSERT INTO matches (match_id, league_id, gameweek, hometeam, awayteam, link, homepoint, awaypoint) VALUES (',
+    900001, ', ', @LEAGUE_ID, ', ', @GW, ', ', @MATCH_HOME, ', ', @MATCH_AWAY, ', 0, 0.0, 0.0)'
+  )
+);
+PREPARE s6c FROM @sql_match_seed; EXECUTE s6c; DEALLOCATE PREPARE s6c;
+
 -- --- Seed unread notifications ---
 SET @has_notification_read_at := (
   SELECT COUNT(*) FROM information_schema.columns
@@ -314,3 +344,4 @@ COMMIT;
 --  seed.user2@example.com / TestPass123!
 --  seed.user3@example.com / TestPass123!
 --  seed.user4@example.com / TestPass123! (no competitor)
+--  seed.user5@example.com / TestPass123! (confirmed competitor, no rankings)

@@ -107,31 +107,33 @@ if (-not $token) {
 Write-Host "PASS: access token acquired."
 Write-Host ""
 
-Write-Host "2) List matches and pick first match_id; if none SKIP detail checks"
+Write-Host "2) Find a league with at least one match in the selected/current GW"
 $homeResp = Invoke-CurlRequest -Method GET -Url "$BaseUrl/home" -Headers @("Authorization: Bearer $token")
 $leagueId = $null
+$matchId = $null
 if ($homeResp.status -eq 200) {
     try {
         $homeObj = $homeResp.body | ConvertFrom-Json
         $leagues = @($homeObj.data.league_selector.leagues)
-        if ($leagues.Count -gt 0) { $leagueId = [int]$leagues[0].league_id }
+        foreach ($league in $leagues) {
+            $candidateLeagueId = [int]$league.league_id
+            $listResp = Invoke-CurlRequest -Method GET -Url "$BaseUrl/leagues/$candidateLeagueId/matches" -Headers @("Authorization: Bearer $token")
+            if ($listResp.status -ne 200) {
+                continue
+            }
+            $listObj = $listResp.body | ConvertFrom-Json
+            $items = @($listObj.data.items)
+            if ($items.Count -gt 0) {
+                $leagueId = $candidateLeagueId
+                $matchId = [int]$items[0].match_id
+                break
+            }
+        }
     } catch {}
 }
 if (-not $leagueId) {
     Write-Host "FAIL: could not discover league_id from /home."
     exit 1
-}
-
-$listResp = Invoke-CurlRequest -Method GET -Url "$BaseUrl/leagues/$leagueId/matches" -Headers @("Authorization: Bearer $token")
-$matchId = $null
-if ($listResp.status -eq 200) {
-    try {
-        $listObj = $listResp.body | ConvertFrom-Json
-        $items = @($listObj.data.items)
-        if ($items.Count -gt 0) {
-            $matchId = [int]$items[0].match_id
-        }
-    } catch {}
 }
 if (-not $matchId) {
     Write-Host "SKIP: no matches available for selected league/gw; detail checks skipped."

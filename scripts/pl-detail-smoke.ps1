@@ -162,8 +162,6 @@ if ($detail1.status -eq 200) {
 }
 if ($detail1.status -eq 200 -and $cc1 -eq "private, must-revalidate" -and $etag1 -and $okShape -and $okMetaEtag) {
     Write-Host "PASS: detail returned expected envelope and cache headers."
-} elseif ($detail1.status -eq 409 -and $detail1.body -match '"RANKING_NOT_AVAILABLE"') {
-    Write-Host "PASS: detail returned optional 409 RANKING_NOT_AVAILABLE (no standings rows yet)."
 } else {
     Write-Host "FAIL: detail did not meet expected response/header requirements."
 }

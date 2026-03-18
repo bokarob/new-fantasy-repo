@@ -146,6 +146,13 @@ function auth_profile_by_email(PDO $pdo, string $email): ?array
     return $row ?: null;
 }
 
+function auth_profile_exists_by_id(PDO $pdo, int $profileId): bool
+{
+    $stmt = $pdo->prepare('SELECT 1 FROM profile WHERE profile_id = :profile_id LIMIT 1');
+    $stmt->execute([':profile_id' => $profileId]);
+    return (bool) $stmt->fetchColumn();
+}
+
 function auth_lang_id(PDO $pdo, ?string $lang): int
 {
     $candidate = strtolower(trim((string) $lang));
@@ -479,6 +486,11 @@ function auth_token_refresh(PDO $pdo, array $input): void
         $row = $select->fetch();
 
         if (!$row || $row['revoked_at'] !== null || strtotime((string) $row['expires_at']) <= time()) {
+            $pdo->rollBack();
+            auth_error(401, 'AUTH_INVALID_TOKEN', 'Invalid token.');
+        }
+
+        if (!auth_profile_exists_by_id($pdo, (int) $row['profile_id'])) {
             $pdo->rollBack();
             auth_error(401, 'AUTH_INVALID_TOKEN', 'Invalid token.');
         }

@@ -57,9 +57,6 @@ try {
 
     $confirmedCompetitorIds = pl_detail_confirmed_competitor_ids($pdo, $schema, $leagueId, $privateleagueId);
     $standings = pl_detail_standings($pdo, $schema, $leagueId, $currentGw, $confirmedCompetitorIds, $callerCompetitorId);
-    if (count($confirmedCompetitorIds) > 0 && count($standings['items']) === 0) {
-        pl_detail_error(409, 'RANKING_NOT_AVAILABLE', 'Standings are not available yet.');
-    }
 
     $etagBuild = pl_detail_etag_and_last_updated(
         $pdo,

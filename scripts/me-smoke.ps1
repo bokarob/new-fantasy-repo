@@ -101,14 +101,17 @@ $cc1 = Header-Value -Headers $me1.headers -Name "Cache-Control"
 $etag1 = Header-Value -Headers $me1.headers -Name "ETag"
 $hasMe = $false
 $metaEtagMatches = $false
+$langNormalized = $false
 if ($me1.status -eq 200) {
     try {
         $obj = $me1.body | ConvertFrom-Json
         $hasMe = $null -ne $obj.data.me -and $null -ne $obj.data.me.profile_id -and $null -ne $obj.data.me.created_at
         $metaEtagMatches = $obj.meta.etag -eq $etag1
+        $langValue = [string]$obj.data.me.lang
+        $langNormalized = ($langValue -eq $langValue.ToLowerInvariant())
     } catch {}
 }
-if ($me1.status -eq 200 -and $cc1 -eq "private, must-revalidate" -and $etag1 -and $hasMe -and $metaEtagMatches) {
+if ($me1.status -eq 200 -and $cc1 -eq "private, must-revalidate" -and $etag1 -and $hasMe -and $metaEtagMatches -and $langNormalized) {
     Write-Host "PASS: /me returned 200 with expected envelope and cache headers."
 } else {
     Write-Host "FAIL: /me did not meet expected response/header requirements."

@@ -9,6 +9,9 @@ try {
     if ($method === 'POST') {
         team_handle_create_post();
     }
+    if ($method === 'DELETE') {
+        team_handle_delete();
+    }
     if ($method !== 'GET') {
         team_error(404, 'BAD_REQUEST', 'Endpoint not found.');
     }
@@ -261,6 +264,81 @@ function team_handle_create_post(): void
     }
 }
 
+function team_handle_delete(): void
+{
+    header('Cache-Control: no-store');
+
+    $leagueId = team_resolve_league_id();
+    $pdo = team_db();
+    $profileId = team_require_auth_profile_id();
+    $schema = team_schema_info($pdo);
+
+    if (!team_league_exists($pdo, $leagueId)) {
+        team_error(404, 'LEAGUE_NOT_FOUND', 'League not found.');
+    }
+
+    $gw = team_current_gameweek($pdo, $leagueId);
+    if ($gw === null) {
+        team_error(409, 'GW_NOT_AVAILABLE', 'League GW not initialized.');
+    }
+    if (!(bool) $gw['is_open']) {
+        team_error(409, 'STATE_CONFLICT', 'Team deletion is not allowed in the current league state.');
+    }
+
+    $competitor = team_competitor($pdo, $profileId, $leagueId, $schema);
+    if ($competitor === null) {
+        team_error(404, 'TEAM_NOT_FOUND', 'User has no team in this league.');
+    }
+
+    $competitorId = (int) $competitor['competitor_id'];
+
+    try {
+        $pdo->beginTransaction();
+
+        $adminPrivateleagueIds = team_admin_privateleague_ids($pdo, $schema, $leagueId, $profileId);
+        if (!empty($adminPrivateleagueIds)) {
+            team_delete_rows_by_ids($pdo, 'privateleaguemembers', 'privateleague_id', $adminPrivateleagueIds);
+            team_delete_rows_by_ids($pdo, 'privateleague', 'privateleague_id', $adminPrivateleagueIds);
+        }
+
+        team_delete_rows_by_ids($pdo, 'privateleaguemembers', 'competitor_id', [$competitorId]);
+        team_delete_rows_by_ids($pdo, 'votes', 'competitor_id', [$competitorId]);
+        team_delete_rows_by_ids($pdo, 'roster', 'competitor_id', [$competitorId]);
+        team_delete_rows_by_ids($pdo, 'transfers', 'competitor_id', [$competitorId]);
+        team_delete_rows_by_ids($pdo, 'teamresult', 'competitor_id', [$competitorId]);
+        team_delete_rows_by_ids($pdo, 'teamranking', 'competitor_id', [$competitorId]);
+
+        $stmt = $pdo->prepare(
+            'DELETE FROM competitor
+             WHERE competitor_id = :competitor_id
+             LIMIT 1'
+        );
+        $stmt->execute([':competitor_id' => $competitorId]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        team_error(500, 'INTERNAL_ERROR', 'Unexpected server error.');
+    }
+
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    echo json_encode([
+        'meta' => [
+            'server_time' => $now,
+            'league_id' => $leagueId,
+            'current_gw' => (int) $gw['gw'],
+            'last_updated' => $now,
+            'etag' => null,
+        ],
+        'data' => [
+            'ok' => true,
+        ],
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 function team_resolve_league_id(): int
 {
     $raw = null;
@@ -423,7 +501,7 @@ function team_schema_info(PDO $pdo): array
         'SELECT table_name, column_name
          FROM information_schema.columns
          WHERE table_schema = :db
-           AND table_name IN ("competitor","gameweeks","roster","transfers","playertrade","playerresult","matches","team")'
+           AND table_name IN ("competitor","gameweeks","roster","transfers","playertrade","playerresult","matches","team","privateleague","privateleaguemembers","votes")'
     );
     $stmt->execute([':db' => $dbName]);
     $rows = $stmt->fetchAll() ?: [];
@@ -434,6 +512,61 @@ function team_schema_info(PDO $pdo): array
     }
     $cache = $out;
     return $cache;
+}
+
+function team_admin_privateleague_ids(PDO $pdo, array $schema, int $leagueId, int $profileId): array
+{
+    $adminColumn = ($schema['privateleague.admin_profile_id'] ?? false) ? 'admin_profile_id' : 'admin';
+    $stmt = $pdo->prepare(
+        'SELECT privateleague_id
+         FROM privateleague
+         WHERE league_id = :league_id
+           AND ' . $adminColumn . ' = :profile_id
+         ORDER BY privateleague_id ASC'
+    );
+    $stmt->execute([
+        ':league_id' => $leagueId,
+        ':profile_id' => $profileId,
+    ]);
+    $rows = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+    $ids = [];
+    foreach ($rows as $row) {
+        $id = (int) $row;
+        if ($id > 0) {
+            $ids[] = $id;
+        }
+    }
+    return array_values(array_unique($ids));
+}
+
+function team_delete_rows_by_ids(PDO $pdo, string $table, string $column, array $ids): void
+{
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+    if (empty($ids)) {
+        return;
+    }
+
+    $bind = [];
+    $params = [];
+    foreach ($ids as $idx => $id) {
+        if ($id <= 0) {
+            continue;
+        }
+        $key = ':id' . $idx;
+        $bind[] = $key;
+        $params[$key] = $id;
+    }
+
+    if (empty($bind)) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        'DELETE FROM ' . $table . '
+         WHERE ' . $column . ' IN (' . implode(',', $bind) . ')'
+    );
+    $stmt->execute($params);
 }
 
 function team_league_exists(PDO $pdo, int $leagueId): bool

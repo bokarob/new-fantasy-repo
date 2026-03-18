@@ -25,11 +25,13 @@ $PreferredOrder = @(
   "rules-smoke.ps1"
   "me-smoke.ps1"
   "me-patch-smoke.ps1"
+  "me-delete-smoke.ps1"
   "me-teams-smoke.ps1"
   "contact-smoke.ps1"
   "team-builder-smoke.ps1"
   "team-create-smoke.ps1"
   "team-smoke.ps1"
+  "team-delete-smoke.ps1"
   "captain-smoke.ps1"
   "substitute-smoke.ps1"
   "market-players-smoke.ps1"
@@ -48,6 +50,7 @@ $PreferredOrder = @(
   "pl-list-smoke.ps1"
   "pl-create-smoke.ps1"
   "pl-detail-smoke.ps1"
+  "pl-detail-unranked-smoke.ps1"
   "pl-invite-search-smoke.ps1"
   "pl-invite-smoke.ps1"
   "pl-invites-get-smoke.ps1"
@@ -74,6 +77,7 @@ $ScriptArguments = @{
   "pl-list-smoke.ps1"           = @("-Email", "seed.user2@example.com")
   "pl-create-smoke.ps1"         = @("-Email", "seed.user2@example.com")
   "pl-detail-smoke.ps1"         = @("-Email", "seed.user2@example.com")
+  "pl-detail-unranked-smoke.ps1" = @("-Email", "seed.user2@example.com")
   "pl-invite-search-smoke.ps1"  = @("-Email", "seed.user2@example.com")
   "pl-invite-smoke.ps1"         = @("-Email", "seed.user2@example.com")
   "pl-invites-get-smoke.ps1"    = @("-Email", "seed.user3@example.com")
